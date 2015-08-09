@@ -39,6 +39,13 @@
 			set;
 		}
 
+		public Type CollectionType
+		{
+			get;
+
+			set;
+		}
+
 		public Boolean Pass => InputCount == OutputCount && InterimCount == 0;
 
 		public Int32 WritersCount

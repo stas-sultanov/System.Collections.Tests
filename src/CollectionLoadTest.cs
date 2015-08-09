@@ -1,31 +1,18 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace System.Collections.Tests
 {
-	public static class CollectionTestHelper
-	{
-		#region Methods
-
-		public static CollectionTestHelper<TItem, TInterimCollection, TOutputCollection> Create<TItem, TInterimCollection, TOutputCollection>(String name, IReadOnlyList<TItem> auxCollection, Int32 writersCount, CollectionTestHelper<TItem, TInterimCollection, TOutputCollection>.Add add, CollectionTestHelper<TItem, TInterimCollection, TOutputCollection>.Move move)
-			where TInterimCollection : IReadOnlyCollection<TItem>, new()
-			where TOutputCollection : ICollection<TItem>, new()
-		{
-			return new CollectionTestHelper<TItem, TInterimCollection, TOutputCollection>(name, auxCollection, writersCount, add, move);
-		}
-
-		#endregion
-	}
-
-	public sealed class CollectionTestHelper<TItem, TInterimCollection, TOutputCollection>
-		where TInterimCollection : IReadOnlyCollection<TItem>, new()
-		where TOutputCollection : ICollection<TItem>, new()
+	public sealed class CollectionLoadTest<TInputItem, TInterimItem, TOutputItem, TInterimCollection, TOutputCollection>
+		where TInterimCollection : IReadOnlyCollection<TInterimItem>, new()
+		where TOutputCollection : ICollection<TOutputItem>, new()
 	{
 		#region Nested Types
 
-		public delegate void Add(TItem inputItem, ref TInterimCollection source);
+		public delegate void Add(TInputItem inputItem, ref TInterimCollection source);
 
 		public delegate void Move(ref TInterimCollection source, ref TOutputCollection output);
 
@@ -50,7 +37,7 @@ namespace System.Collections.Tests
 		/// <summary>
 		/// Initializes a new instance of the class.
 		/// </summary>
-		public CollectionTestHelper(String description, IReadOnlyList<TItem> input, Int32 writersCount, Add add, Move move)
+		public CollectionLoadTest(String description, IReadOnlyList<TInputItem> input, Int32 writersCount, Add add, Move move)
 		{
 			if (description == null)
 			{
@@ -95,19 +82,9 @@ namespace System.Collections.Tests
 		}
 
 		/// <summary>
-		/// The total elapsed time.
-		/// </summary>
-		public TimeSpan ElapsedTime
-		{
-			get;
-
-			private set;
-		}
-
-		/// <summary>
 		/// The input collection.
 		/// </summary>
-		public IReadOnlyList<TItem> Input
+		public IReadOnlyList<TInputItem> Input
 		{
 			get;
 		}
@@ -120,7 +97,7 @@ namespace System.Collections.Tests
 		/// <summary>
 		/// The output collection.
 		/// </summary>
-		public TOutputCollection Output => output;
+		public ICollection<TOutputItem> Output => output;
 
 		/// <summary>
 		/// The count of concurrent writers.
@@ -161,8 +138,10 @@ namespace System.Collections.Tests
 		{
 			while (writersAreActive || interim.Count != 0)
 			{
+				// pass execution to other thread
 				await Task.Yield();
 
+				// move data from interim to output
 				move(ref interim, ref output);
 			}
 		}
@@ -215,10 +194,11 @@ namespace System.Collections.Tests
 			// Compose and return test result
 			return new CollectionTestResult
 			{
+				CollectionType = typeof(TInterimCollection),
 				Description = Description,
 				ElapsedTime = stopWatch.Elapsed,
 				InputCount = Input.Count,
-				InterimCount = Interim.Count,
+				InterimCount = Interim.Count(),
 				OutputCount = Output.Count,
 				WritersCount = WritersCount
 			};

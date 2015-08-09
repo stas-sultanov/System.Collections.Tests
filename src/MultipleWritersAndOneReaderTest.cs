@@ -1,9 +1,7 @@
-﻿using System.Collections.Concurrent;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -19,9 +17,9 @@ namespace System.Collections.Tests
 
 		private const Int32 concurrentWritersCount = 512;
 
-		private const Int32 itemsCount = Int32.MaxValue / 128;
+		private const Int32 itemsCount = Int32.MaxValue / 1024;
 
-		private static readonly Int64[] items;
+		private static readonly Int64[] inputItems;
 
 		#endregion
 
@@ -31,11 +29,11 @@ namespace System.Collections.Tests
 		{
 			var random = new Random(DateTime.UtcNow.Millisecond);
 
-			items = new Int64[itemsCount];
+			inputItems = new Int64[itemsCount];
 
 			for (var index = 0; index < itemsCount; index++)
 			{
-				items[index] = random.Next();
+				inputItems[index] = random.Next();
 			}
 		}
 
@@ -47,7 +45,7 @@ namespace System.Collections.Tests
 		public async Task ConcurrentStackTryPop()
 		{
 			// Create test
-			var test = CreateConcurrentStackTest(items, concurrentWritersCount);
+			var test = CollectionLoadTestHelper.RunConcurrentStackTestAsync(inputItems, concurrentWritersCount);
 
 			// Run test
 			var testResult = await test.RunAsync();
@@ -60,7 +58,7 @@ namespace System.Collections.Tests
 		public async Task ConcurrentStackTryPopRange()
 		{
 			// Create test
-			var test = CreateConcurrentStackRangeTest(items, concurrentWritersCount);
+			var test = CollectionLoadTestHelper.CreateConcurrentStackRangeTest(inputItems, concurrentWritersCount);
 
 			// Run test
 			var testResult = await test.RunAsync();
@@ -73,7 +71,7 @@ namespace System.Collections.Tests
 		public async Task ConcurrentBagInterlockedExchange()
 		{
 			// Create test
-			var test = CreateConcurrentBagWitInterlockedExchangeTest(items, concurrentWritersCount);
+			var test = CollectionLoadTestHelper.CreateConcurrentBagWitInterlockedExchangeTest(inputItems, concurrentWritersCount);
 
 			// Run test
 			var testResult = await test.RunAsync();
@@ -86,7 +84,7 @@ namespace System.Collections.Tests
 		public async Task ConcurrentBag()
 		{
 			// Create test
-			var test = CreateConcurrentBagTest(items, concurrentWritersCount);
+			var test = CollectionLoadTestHelper.CreateConcurrentBagTest(inputItems, concurrentWritersCount);
 
 			// Run test
 			var testResult = await test.RunAsync();
@@ -99,7 +97,7 @@ namespace System.Collections.Tests
 		public async Task ListLock()
 		{
 			// Create test
-			var test = CreateListLockTest(items, concurrentWritersCount);
+			var test = CollectionLoadTestHelper.CreateListLockTest(inputItems, concurrentWritersCount);
 
 			// Run test
 			var testResult = await test.RunAsync();
@@ -111,15 +109,7 @@ namespace System.Collections.Tests
 		[TestMethod]
 		public async Task Compare()
 		{
-			var results = new[]
-			{
-				await CreateListLockTest(items, concurrentWritersCount).RunAsync(),
-				await CreateConcurrentQueueTest(items, concurrentWritersCount).RunAsync(),
-				await CreateConcurrentStackTest(items, concurrentWritersCount).RunAsync(),
-				await CreateConcurrentStackRangeTest(items, concurrentWritersCount).RunAsync(),
-				await CreateConcurrentBagTest(items, concurrentWritersCount).RunAsync(),
-				await CreateConcurrentBagWitInterlockedExchangeTest(items, concurrentWritersCount).RunAsync(),
-			};
+			var results = await CollectionLoadTestHelper.RunAllAsync(inputItems, concurrentWritersCount);
 
 			// Print results
 			PrintResults(results);
@@ -128,138 +118,6 @@ namespace System.Collections.Tests
 		#endregion
 
 		#region Private methods
-
-		private static CollectionTestHelper<TItem, List<TItem>, List<TItem>> CreateListLockTest<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			return CollectionTestHelper.Create
-				(
-					$"type: List<T> # source: lock, ToArray, Clear # destination AddRange",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref List<TItem> source) =>
-					{
-						lock (source)
-						{
-							source.Add(inputItem);
-						}
-					},
-					(ref List<TItem> source, ref List<TItem> destination) =>
-					{
-						TItem[] tempItems;
-
-						lock (source)
-						{
-							tempItems = source.ToArray();
-
-							source.Clear();
-						}
-
-						destination.AddRange(tempItems);
-					}
-				);
-		}
-
-		private static CollectionTestHelper<TItem, ConcurrentStack<TItem>, List<TItem>> CreateConcurrentStackTest<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			return CollectionTestHelper.Create
-				(
-					$"type: CoucurrentStack<T> # source: while TryPop # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentStack<TItem> source) => source.Push(inputItem),
-					(ref ConcurrentStack<TItem> source, ref List<TItem> destination) =>
-					{
-						TItem sourceItem;
-
-						while (source.TryPop(out sourceItem))
-						{
-							destination.Add(sourceItem);
-						}
-					}
-				);
-		}
-
-		private static CollectionTestHelper<TItem, ConcurrentStack<TItem>, List<TItem>> CreateConcurrentStackRangeTest<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			var tempItems = new TItem[1024];
-
-			return CollectionTestHelper.Create
-				(
-					$"type: CoucurrentStack<T> # source: while TryPopRange # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentStack<TItem> source) => source.Push(inputItem),
-					(ref ConcurrentStack<TItem> source, ref List<TItem> destination) =>
-					{
-						Int32 popCount;
-
-						while ((popCount = source.TryPopRange(tempItems)) != 0)
-						{
-							for (var index = 0; index < popCount; index++)
-							{
-								destination.Add(tempItems[index]);
-							}
-						}
-					}
-				);
-		}
-
-		private static CollectionTestHelper<TItem, ConcurrentQueue<TItem>, List<TItem>> CreateConcurrentQueueTest<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			return CollectionTestHelper.Create
-				(
-					$"type: ConcurrentQueue<T> # source: while TryDequeue # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentQueue<TItem> source) => source.Enqueue(inputItem),
-					(ref ConcurrentQueue<TItem> source, ref List<TItem> destination) =>
-					{
-						TItem sourceItem;
-
-						while (source.TryDequeue(out sourceItem))
-						{
-							destination.Add(sourceItem);
-						}
-					}
-				);
-		}
-
-		private static CollectionTestHelper<TItem, ConcurrentBag<TItem>, List<TItem>> CreateConcurrentBagWitInterlockedExchangeTest<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			return CollectionTestHelper.Create
-				(
-					"type: CoucurrentBage<T> # source: replace # destination: AddRange",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentBag<TItem> source) => source.Add(inputItem),
-					(ref ConcurrentBag<TItem> source, ref List<TItem> destination) =>
-					{
-						var old = Interlocked.Exchange(ref source, new ConcurrentBag<TItem>());
-
-						destination.AddRange(old);
-					}
-				);
-		}
-
-		private static CollectionTestHelper<TItem, ConcurrentBag<TItem>, List<TItem>> CreateConcurrentBagTest<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			return CollectionTestHelper.Create
-				(
-					$"type: CoucurrentBage<T> # source: while try take # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentBag<TItem> source) => source.Add(inputItem),
-					(ref ConcurrentBag<TItem> source, ref List<TItem> destination) =>
-					{
-						TItem item;
-
-						while (source.TryTake(out item))
-						{
-							destination.Add(item);
-						}
-					}
-				);
-		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static void PrintResults(CollectionTestResult testResult)
@@ -280,7 +138,7 @@ namespace System.Collections.Tests
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private static void PrintResults(params CollectionTestResult[] testResults)
+		private static void PrintResults(IReadOnlyCollection<CollectionTestResult> testResults)
 		{
 			Trace.TraceInformation($"Pass \t| Time \t| Writers count | Input Count | Interim Count | Output Count | Description ");
 
