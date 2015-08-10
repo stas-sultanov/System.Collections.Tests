@@ -24,7 +24,7 @@ namespace System.Collections.Tests.App
 				Int32.TryParse(args[1], out concurrentWritersCount);
 			}
 
-			TestList();
+		//	TestList();
 
 			Console.WriteLine();
 
@@ -67,13 +67,13 @@ namespace System.Collections.Tests.App
 
 		private static void PrintResults(IEnumerable<CollectionTestResult> testResults)
 		{
-			Console.WriteLine("Time\t| Pass\t| Type");
+			Console.WriteLine("Time\t| Pass\t| Input\t| Main\t| Output\t|Type");
 
 			Console.WriteLine("--------------------------------");
 
 			foreach (var testResult in testResults.OrderBy(x => x.ElapsedTime).ThenBy(x => x.Pass))
 			{
-				Console.WriteLine($"{(Int32) testResult.ElapsedTime.TotalMilliseconds:D5}\t| {testResult.Pass}\t| {testResult.CollectionType.Name} : {testResult.Description}");
+				Console.WriteLine($"{(Int32) testResult.ElapsedTime.TotalMilliseconds:D5}\t| {testResult.Pass}\t| {testResult.InputCount}\t| {testResult.MainCount}\t| {testResult.OutputCount}\t| {testResult.CollectionType.Name} : {testResult.Description}");
 			}
 		}
 

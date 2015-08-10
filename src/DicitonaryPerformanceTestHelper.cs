@@ -16,30 +16,32 @@ namespace System.Collections.Tests
 				$"Dictionary | lock, Clear | AddRange",
 				inputItems,
 				writersCount,
-				(KeyValuePair<TKey, TValue> inputItem, ref Dictionary<TKey, ConcurrentQueue<TValue>> interim) =>
+				// write
+				(KeyValuePair<TKey, TValue> inputItem, ref Dictionary<TKey, ConcurrentQueue<TValue>> main) =>
 				{
-					ConcurrentQueue<TValue> coll;
+					ConcurrentQueue<TValue> queue;
 
-					lock (interim)
+					lock (main)
 					{
 						// ReSharper disable once InvertIf
-						if (!interim.TryGetValue(inputItem.Key, out coll))
+						if (!main.TryGetValue(inputItem.Key, out queue))
 						{
-							coll = new ConcurrentQueue<TValue>();
+							queue = new ConcurrentQueue<TValue>();
 
-							interim.Add(inputItem.Key, coll);
+							main.Add(inputItem.Key, queue);
 						}
+
+						queue.Enqueue(inputItem.Value);
 					}
-
-					coll.Enqueue(inputItem.Value);
 				},
-				(ref Dictionary<TKey, ConcurrentQueue<TValue>> interim, ref List<KeyValuePair<TKey, TValue>> output) =>
+				// read
+				(ref Dictionary<TKey, ConcurrentQueue<TValue>> main, ref List<KeyValuePair<TKey, TValue>> output) =>
 				{
-					lock (interim)
+					lock (main)
 					{
-						output.AddRange(from pair in interim from subPair in pair.Value select new KeyValuePair<TKey, TValue>(pair.Key, subPair));
+						output.AddRange(from pair in main from subPair in pair.Value select new KeyValuePair<TKey, TValue>(pair.Key, subPair));
 
-						interim.Clear();
+						main.Clear();
 					}
 				}
 				);
@@ -54,9 +56,10 @@ namespace System.Collections.Tests
 				$"ConcurrentDictionary | lock, Clear | AddRange",
 				inputItems,
 				writersCount,
-				(KeyValuePair<TKey, TValue> inputItem, ref ConcurrentDictionary<TKey, ConcurrentQueue<TValue>> interim) =>
+				// write
+				(KeyValuePair<TKey, TValue> inputItem, ref ConcurrentDictionary<TKey, ConcurrentQueue<TValue>> main) =>
 				{
-					interim.AddOrUpdate
+					main.AddOrUpdate
 						(
 							inputItem.Key,
 							key =>
@@ -67,30 +70,31 @@ namespace System.Collections.Tests
 
 								return result;
 							},
-							(key, values) =>
+							(key, queue) =>
 							{
-								values.Enqueue(inputItem.Value);
+								queue.Enqueue(inputItem.Value);
 
-								return values;
+								return queue;
 							}
 						);
 				},
-				(ref ConcurrentDictionary<TKey, ConcurrentQueue<TValue>> interim, ref List<KeyValuePair<TKey, TValue>> output) =>
+				// read
+				(ref ConcurrentDictionary<TKey, ConcurrentQueue<TValue>> main, ref List<KeyValuePair<TKey, TValue>> output) =>
 				{
-					var keys = interim.Keys.ToArray();
+					var keys = main.Keys.ToArray();
 
 					foreach (var key in keys)
 					{
-						ConcurrentQueue<TValue> col;
+						ConcurrentQueue<TValue> queue;
 
-						if (!interim.TryRemove(key, out col))
+						if (!main.TryRemove(key, out queue))
 						{
 							continue;
 						}
 
 						TValue value;
 
-						while (col.TryDequeue(out value))
+						while (queue.TryDequeue(out value))
 						{
 							output.Add(new KeyValuePair<TKey, TValue>(key, value));
 						}

@@ -199,7 +199,7 @@ namespace System.Collections.Tests
 				Description = description,
 				ElapsedTime = stopWatch.Elapsed,
 				InputCount = input.Count,
-				InterimCount = main.Count(),
+				MainCount = main.Count(),
 				OutputCount = output.Count(),
 				WritersCount = writersCount
 			};

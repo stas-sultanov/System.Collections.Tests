@@ -35,7 +35,7 @@
 			set;
 		}
 
-		public Int32 InterimCount
+		public Int32 MainCount
 		{
 			get;
 
@@ -49,7 +49,7 @@
 			set;
 		}
 
-		public Boolean Pass => InputCount == OutputCount && InterimCount == 0;
+		public Boolean Pass => InputCount == OutputCount && MainCount == 0;
 
 		public Int32 WritersCount
 		{

@@ -31,22 +31,22 @@ namespace System.Collections.Tests
 					$"source: lock, ToArray, Clear # destination: AddRange",
 					inputItems,
 					writersCount,
-					(TItem inputItem, ref List<TItem> interim) =>
+					(TItem inputItem, ref List<TItem> main) =>
 					{
-						lock (interim)
+						lock (main)
 						{
-							interim.Add(inputItem);
+							main.Add(inputItem);
 						}
 					},
-					(ref List<TItem> interim, ref List<TItem> output) =>
+					(ref List<TItem> main, ref List<TItem> output) =>
 					{
 						TItem[] tempItems;
 
-						lock (interim)
+						lock (main)
 						{
-							tempItems = interim.ToArray();
+							tempItems = main.ToArray();
 
-							interim.Clear();
+							main.Clear();
 						}
 
 						output.AddRange(tempItems);
@@ -144,14 +144,14 @@ namespace System.Collections.Tests
 					$"source: while TryDequeue # destination: Add",
 					inputItems,
 					writersCount,
-					(TItem inputItem, ref ConcurrentQueue<TItem> source) => source.Enqueue(inputItem),
-					(ref ConcurrentQueue<TItem> source, ref List<TItem> destination) =>
+					(TItem inputItem, ref ConcurrentQueue<TItem> main) => main.Enqueue(inputItem),
+					(ref ConcurrentQueue<TItem> main, ref List<TItem> output) =>
 					{
-						TItem sourceItem;
+						TItem item;
 
-						while (source.TryDequeue(out sourceItem))
+						while (main.TryDequeue(out item))
 						{
-							destination.Add(sourceItem);
+							output.Add(item);
 						}
 					}
 				);
