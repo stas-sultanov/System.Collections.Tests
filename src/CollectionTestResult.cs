@@ -4,6 +4,16 @@
 	{
 		#region Properties
 
+		public Type CollectionType
+		{
+			get;
+
+			set;
+		}
+
+		/// <summary>
+		/// The description of the test.
+		/// </summary>
 		public String Description
 		{
 			get;
@@ -33,13 +43,6 @@
 		}
 
 		public Int32 OutputCount
-		{
-			get;
-
-			set;
-		}
-
-		public Type CollectionType
 		{
 			get;
 

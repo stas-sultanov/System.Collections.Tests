@@ -74,7 +74,6 @@
     <Compile Include="DicitonaryPerformanceTestHelper.cs" />
     <Compile Include="CollectionLoadTestHelper.cs" />
     <Compile Include="CollectionTestResult.cs" />
-    <None Include="MultipleWritersAndOneReaderTest.cs" />
     <Compile Include="CollectionLoadTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

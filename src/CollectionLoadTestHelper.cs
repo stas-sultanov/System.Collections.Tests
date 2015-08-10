@@ -15,13 +15,13 @@ namespace System.Collections.Tests
 			String name,
 			IReadOnlyList<TItem> inputItems,
 			Int32 writersCount,
-			CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>.Add add,
+			CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>.Put put,
 			CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>.Move move
 			)
 			where TInterimCollection : IReadOnlyCollection<TItem>, new()
 			where TOutputCollection : ICollection<TItem>, new()
 		{
-			return new CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>(name, inputItems, writersCount, add, move);
+			return new CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>(name, inputItems, writersCount, put, move);
 		}
 
 		public static Task<CollectionTestResult> RunListLockTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
