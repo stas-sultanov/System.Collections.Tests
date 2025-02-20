@@ -1,263 +1,270 @@
+namespace System.Collections.Tests;
+
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace System.Collections.Tests
+public static class CollectionLoadTestHelper
 {
-	public static class CollectionLoadTestHelper
+	#region Methods
+
+	/// <summary>
+	/// Runs all tests.
+	/// </summary>
+	/// <typeparam name="TItem">Item type.</typeparam>
+	/// <param name="inputItems">Collection of input items.</param>
+	/// <param name="producersCount">Count of producers.</param>
+	/// <returns>Collection of <see cref="CollectionLoadTestResult"/>.</returns>
+	public static async Task<CollectionLoadTestResult[]> RunAllAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 producersCount)
 	{
-		#region Methods
+		var results = new CollectionLoadTestResult[8];
 
-		public static CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>
-			Create<TItem, TInterimCollection, TOutputCollection>
-			(
-			String name,
-			IReadOnlyList<TItem> inputItems,
-			Int32 writersCount,
-			CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>.Put put,
-			CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>.Move move
-			)
-			where TInterimCollection : IReadOnlyCollection<TItem>, new()
-			where TOutputCollection : ICollection<TItem>, new()
 		{
-			return new CollectionLoadTest<TItem, TItem, TItem, TInterimCollection, TOutputCollection>(name, inputItems, writersCount, put, move);
+			results[0] = await Test_ConcurrentBag_Interlocked_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunListLockTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var test = Create
-				(
-					$"source: lock, ToArray, Clear # destination: AddRange",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref List<TItem> main) =>
-					{
-						lock (main)
-						{
-							main.Add(inputItem);
-						}
-					},
-					(ref List<TItem> main, ref List<TItem> output) =>
-					{
-						TItem[] tempItems;
-
-						lock (main)
-						{
-							tempItems = main.ToArray();
-
-							main.Clear();
-						}
-
-						output.AddRange(tempItems);
-					}
-				);
-
-			return test.RunAsync();
+			results[1] = await Test_ConcurrentBag_TryTake_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunQueueLockTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var test = Create
-				(
-					$"source: lock, ToArray, Clear # destination: AddRange",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref Queue<TItem> interim) =>
-					{
-						lock (interim)
-						{
-							interim.Enqueue(inputItem);
-						}
-					},
-					(ref Queue<TItem> interim, ref List<TItem> output) =>
-					{
-						TItem[] tempItems;
-
-						lock (interim)
-						{
-							tempItems = interim.ToArray();
-
-							interim.Clear();
-						}
-
-						output.AddRange(tempItems);
-					}
-				);
-
-			return test.RunAsync();
+			results[2] = await Test_ConcurrentQueue_TryDequeue_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunConcurrentStackTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var test = Create
-				(
-					$"source: while TryPop # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentStack<TItem> source) => source.Push(inputItem),
-					(ref ConcurrentStack<TItem> source, ref List<TItem> destination) =>
-					{
-						TItem sourceItem;
-
-						while (source.TryPop(out sourceItem))
-						{
-							destination.Add(sourceItem);
-						}
-					}
-				);
-
-			return test.RunAsync();
+			results[3] = await Test_ConcurrentQueue_Interlocked_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunConcurrentStackRangeTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var tempItems = new TItem[1024];
-
-			var test = Create
-				(
-					$"source: while TryPopRange # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentStack<TItem> source) => source.Push(inputItem),
-					(ref ConcurrentStack<TItem> source, ref List<TItem> destination) =>
-					{
-						Int32 popCount;
-
-						while ((popCount = source.TryPopRange(tempItems)) != 0)
-						{
-							for (var index = 0; index < popCount; index++)
-							{
-								destination.Add(tempItems[index]);
-							}
-						}
-					}
-				);
-
-			return test.RunAsync();
+			results[4] = await Test_ConcurrentStack_Add_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunConcurrentQueueTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var test = Create
-				(
-					$"source: while TryDequeue # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentQueue<TItem> main) => main.Enqueue(inputItem),
-					(ref ConcurrentQueue<TItem> main, ref List<TItem> output) =>
-					{
-						TItem item;
-
-						while (main.TryDequeue(out item))
-						{
-							output.Add(item);
-						}
-					}
-				);
-
-			return test.RunAsync();
+			results[5] = await Test_ConcurrentStack_AddRange_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunConcurrentQueueInterlockedTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var test = Create
-				(
-					$"source: Intelocked.Exchange # destination: AddRange",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentQueue<TItem> source) => source.Enqueue(inputItem),
-					(ref ConcurrentQueue<TItem> source, ref List<TItem> destination) =>
-					{
-						var old = Interlocked.Exchange(ref source, new ConcurrentQueue<TItem>());
-
-						destination.AddRange(old);
-					}
-				);
-
-			return test.RunAsync();
+			results[6] = await Test_List_Lock_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunConcurrentBagInterlockedTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
 		{
-			var test = Create
-				(
-					"source: replace # destination: AddRange",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentBag<TItem> source) => source.Add(inputItem),
-					(ref ConcurrentBag<TItem> source, ref List<TItem> destination) =>
-					{
-						var old = Interlocked.Exchange(ref source, new ConcurrentBag<TItem>());
-
-						destination.AddRange(old);
-					}
-				);
-
-			return test.RunAsync();
+			results[7] = await Test_Queue_Lock_Async(inputItems, producersCount);
 		}
 
-		public static Task<CollectionTestResult> RunConcurrentBagTestAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
-		{
-			var test = Create
-				(
-					$"source: while try take # destination: Add",
-					inputItems,
-					writersCount,
-					(TItem inputItem, ref ConcurrentBag<TItem> source) => source.Add(inputItem),
-					(ref ConcurrentBag<TItem> source, ref List<TItem> destination) =>
-					{
-						TItem item;
-
-						while (source.TryTake(out item))
-						{
-							destination.Add(item);
-						}
-					}
-				);
-
-			return test.RunAsync();
-		}
-
-		public static async Task<IReadOnlyCollection<CollectionTestResult>> RunAllAsync<TItem>(IReadOnlyList<TItem> inputItems, Int32 concurrentWritersCount)
-		{
-			var results = new CollectionTestResult[8];
-
-			{
-				results[0] = await RunListLockTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[1] = await RunConcurrentQueueTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[2] = await RunConcurrentQueueInterlockedTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[3] = await RunConcurrentBagTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[4] = await RunConcurrentBagInterlockedTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[5] = await RunConcurrentStackRangeTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[6] = await RunConcurrentStackTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			{
-				results[7] = await RunQueueLockTestAsync(inputItems, concurrentWritersCount);
-			}
-
-			return results;
-		}
-
-		#endregion
+		return results;
 	}
+
+	public static CollectionLoadTest<ItemType, ItemType, ItemType, MainCollectionType, List<ItemType>> Create<ItemType, MainCollectionType>
+	(
+		String description,
+		Int32 producersCount,
+		IReadOnlyList<ItemType> inputItems,
+		Produce<ItemType, ItemType, MainCollectionType> produce,
+		Consume<ItemType, MainCollectionType, ItemType, List<ItemType>> consume
+	)
+		where MainCollectionType : IReadOnlyCollection<ItemType>, new()
+	{
+		return new CollectionLoadTest<ItemType, ItemType, ItemType, MainCollectionType, List<ItemType>>(description, producersCount, inputItems, produce, consume);
+	}
+
+	/// <summary>
+	/// A test for <see cref="List{T}"/> type.
+	/// </summary>
+	/// <typeparam name="ItemType">Type of the items.</typeparam>
+	/// <param name="inputItems"></param>
+	/// <param name="writersCount"></param>
+	/// <returns></returns>
+	public static Task<CollectionLoadTestResult> Test_List_Lock_Async<ItemType>
+	(
+		IReadOnlyList<ItemType> inputItems,
+		Int32 writersCount
+	)
+	{
+		var test = Create
+		(
+			$"lock + Add; lock + ToArray + Clear + AddRange",
+			writersCount,
+			inputItems,
+			(ItemType inputItem, ref List<ItemType> main) =>
+			{
+				lock (main)
+				{
+					main.Add(inputItem);
+				}
+			},
+			(ref List<ItemType> main, ref List<ItemType> output) =>
+			{
+				ItemType[] tempItems;
+
+				lock (main)
+				{
+					tempItems = [.. main];
+
+					main.Clear();
+				}
+
+				output.AddRange(tempItems);
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_Queue_Lock_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var test = Create
+		(
+			$"lock + Enqueue; lock + ToArray + Clear + AddRange",
+			writersCount,
+			inputItems,
+			(TItem inputItem, ref Queue<TItem> interim) =>
+			{
+				lock (interim)
+				{
+					interim.Enqueue(inputItem);
+				}
+			},
+			(ref Queue<TItem> interim, ref List<TItem> output) =>
+			{
+				TItem[] tempItems;
+
+				lock (interim)
+				{
+					tempItems = [.. interim];
+
+					interim.Clear();
+				}
+
+				output.AddRange(tempItems);
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_ConcurrentStack_Add_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var test = Create
+		(
+			$"Push; while TryPop > Add",
+			writersCount,
+			inputItems,
+			(TItem inputItem, ref ConcurrentStack<TItem> source) => source.Push(inputItem),
+			(ref ConcurrentStack<TItem> source, ref List<TItem> destination) =>
+			{
+				while (source.TryPop(out var sourceItem))
+				{
+					destination.Add(sourceItem);
+				}
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_ConcurrentStack_AddRange_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var tempItems = new TItem[1024];
+
+		var test = Create
+		(
+			$"Push; while TryPopRange > AddRange",
+			writersCount,
+			inputItems,
+			(TItem inputItem, ref ConcurrentStack<TItem> source) => source.Push(inputItem),
+			(ref ConcurrentStack<TItem> source, ref List<TItem> destination) =>
+			{
+				Int32 popCount;
+
+				while ((popCount = source.TryPopRange(tempItems)) != 0)
+				{
+					destination.AddRange(tempItems);
+				}
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_ConcurrentQueue_TryDequeue_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var test = Create
+		(
+			$"Enque; while TryDequeue > Add",
+			writersCount,
+			inputItems,
+			(TItem inputItem, ref ConcurrentQueue<TItem> main) => main.Enqueue(inputItem),
+			(ref ConcurrentQueue<TItem> main, ref List<TItem> output) =>
+			{
+				while (main.TryDequeue(out var item))
+				{
+					output.Add(item);
+				}
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_ConcurrentQueue_Interlocked_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var test = Create
+		(
+			$"Enqueue; Intelocked.Exchange + AddRange",
+			writersCount,
+			inputItems,
+			(TItem item, ref ConcurrentQueue<TItem> main) => main.Enqueue(item),
+			(ref ConcurrentQueue<TItem> main, ref List<TItem> output) =>
+			{
+				var old = Interlocked.Exchange(ref main, new ConcurrentQueue<TItem>());
+
+				output.AddRange(old);
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_ConcurrentBag_Interlocked_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var test = Create
+		(
+			"Add; InterlockedExchange + AddRange",
+			writersCount,
+			inputItems,
+			(TItem inputItem, ref ConcurrentBag<TItem> source) => source.Add(inputItem),
+			(ref ConcurrentBag<TItem> source, ref List<TItem> destination) =>
+			{
+				var old = Interlocked.Exchange(ref source, []);
+
+				destination.AddRange(old);
+			}
+		);
+
+		return test.RunAsync();
+	}
+
+	public static Task<CollectionLoadTestResult> Test_ConcurrentBag_TryTake_Async<TItem>(IReadOnlyList<TItem> inputItems, Int32 writersCount)
+	{
+		var test = Create
+			(
+				$"Add; while TryTake > Add",
+				writersCount,
+				inputItems,
+				(TItem inputItem, ref ConcurrentBag<TItem> source) => source.Add(inputItem),
+				(ref ConcurrentBag<TItem> source, ref List<TItem> destination) =>
+				{
+
+					while (source.TryTake(out var item))
+					{
+						destination.Add(item);
+					}
+				}
+			);
+
+		return test.RunAsync();
+	}
+
+	#endregion
 }

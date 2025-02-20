@@ -1,9 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<AssemblyName>app</AssemblyName>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<LangVersion>latest</LangVersion>
+		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net9.0</TargetFrameworks>
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\src\System.Collections.Tests.csproj" />
+	</ItemGroup>
 
 </Project>
