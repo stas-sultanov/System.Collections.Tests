@@ -1,8 +1,14 @@
-﻿namespace System.Collections.Tests.App;
+﻿// Created by Stas Sultanov.
+// Copyright © Stas Sultanov.
 
+namespace Tests.App;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+
+using Tests;
 
 public static class Program
 {
@@ -11,6 +17,8 @@ public static class Program
 		var itemsCount = 10000000;
 
 		var producersCount = 128;
+
+		var consumerDelay = TimeSpan.FromMicroseconds(1000);
 
 		var outputFile = "result.md";
 
@@ -21,6 +29,8 @@ public static class Program
 			_ = Int32.TryParse(args[1], out producersCount);
 		}
 
+		var testResultList = await TestCollectionAsync(itemsCount, producersCount, consumerDelay);
+
 		using var writer = new StreamWriter(outputFile);
 
 		writer.WriteLine("# Test");
@@ -29,34 +39,42 @@ public static class Program
 
 		writer.WriteLine("## Input Parameters");
 
-		writer.WriteLine("\nItems: **{0}**", itemsCount);
+		writer.WriteLine();
 
-		writer.WriteLine("\nProudcers: **{0}**", producersCount);
+		writer.WriteLine("| Name               | Value");
 
-		var collectionResult = await TestCollectionAsync(itemsCount, producersCount);
+		writer.WriteLine("| :----------------- | :---- ");
 
-		WriteResults(writer, collectionResult);
+		writer.WriteLine("| Items Count        | {0}", itemsCount);
+
+		writer.WriteLine("| Proudcers Count    | {0}", producersCount);
+
+		writer.WriteLine("| Consumer Delay, ms | {0}", consumerDelay.Milliseconds);
+
+		writer.WriteLine();
+
+		WriteResults(writer, testResultList);
 	}
 
-	private static async Task<CollectionLoadTestResult[]> TestDictionaryAsync(Int32 itemsCount, Int32 producersCount)
-	{
-		var random = new Random(DateTime.UtcNow.Millisecond);
+	//private static async Task<CollectionTestResult[]> TestDictionaryAsync(Int32 itemsCount, Int32 producersCount)
+	//{
+	//	var random = new Random(DateTime.UtcNow.Millisecond);
 
-		var inputItems = new KeyValuePair<Int64, Int64>[itemsCount];
+	//	var inputItems = new KeyValuePair<Int64, Int64>[itemsCount];
 
-		for (var index = 0; index < itemsCount; index++)
-		{
-			var value = random.Next();
+	//	for (var index = 0; index < itemsCount; index++)
+	//	{
+	//		var value = random.Next();
 
-			inputItems[index] = new KeyValuePair<Int64, Int64>(index % 4, value);
-		}
+	//		inputItems[index] = new KeyValuePair<Int64, Int64>(index % 4, value);
+	//	}
 
-		var result = await DictionaryPerformanceTestHelper.RunAllAsync(inputItems, producersCount);
+	//	var result = await DictionaryPerformanceTestHelper.RunAllAsync(inputItems, producersCount);
 
-		return result;
-	}
+	//	return result;
+	//}
 
-	private static async Task<CollectionLoadTestResult[]> TestCollectionAsync(Int32 itemsCount, Int32 producersCount)
+	private static async Task<CollectionTestResult[]> TestCollectionAsync(Int32 itemsCount, Int32 producersCount, TimeSpan consumerDelay)
 	{
 		var random = new Random(DateTime.UtcNow.Millisecond);
 
@@ -67,14 +85,14 @@ public static class Program
 			inputItems[index] = random.Next();
 		}
 
-		var result = await CollectionLoadTestHelper.RunAllAsync(inputItems, producersCount);
+		var result = await CollectionTestHelper.RunAllCollectionTestsAsync(inputItems, producersCount, consumerDelay);
 
 		return result;
 	}
 
 	#region Methods: Helpers
 
-	private static void WriteResults(StreamWriter writer, IEnumerable<CollectionLoadTestResult> testResults)
+	private static void WriteResults(StreamWriter writer, IEnumerable<CollectionTestResult> testResults)
 	{
 		writer.WriteLine("\n## Results");
 
@@ -119,7 +137,7 @@ public static class Program
 
 			_ =
 
-			_ = builder.Append(GetNormalizedName(genericArguments[i], open, close));
+			_ = builder.Append(genericArguments[i].GetNormalizedName(open, close));
 		}
 
 		_ = builder.Append(close);

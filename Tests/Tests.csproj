@@ -1,15 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<AssemblyName>app</AssemblyName>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<LangVersion>latest</LangVersion>
-		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net9.0</TargetFrameworks>
+		<Platforms>AnyCPU;x64</Platforms>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\src\System.Collections.Tests.csproj" />
+		<Compile Remove="DicitonaryPerformanceTestHelper.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="DicitonaryPerformanceTestHelper.cs" />
 	</ItemGroup>
 
 </Project>

@@ -8,46 +8,47 @@ public static class DictionaryPerformanceTestHelper
 {
 	#region Methods
 
-	public static Task<CollectionLoadTestResult> CreateDictionaryTest<TKey, TValue>(IReadOnlyList<KeyValuePair<TKey, TValue>> inputItems, Int32 writersCount)
+	public static Task<CollectionTestResult> CreateDictionaryTest<TKey, TValue>(IReadOnlyList<KeyValuePair<TKey, TValue>> inputItems, Int32 producersCount, TimeSpan producerDelay)
 	{
-		var test = new CollectionLoadTest<KeyValuePair<TKey, TValue>, KeyValuePair<TKey, ConcurrentQueue<TValue>>, KeyValuePair<TKey, TValue>, Dictionary<TKey, ConcurrentQueue<TValue>>, List<KeyValuePair<TKey, TValue>>>
+		var test = new CollectionTest<KeyValuePair<TKey, TValue>, KeyValuePair<TKey, ConcurrentQueue<TValue>>, KeyValuePair<TKey, TValue>, Dictionary<TKey, ConcurrentQueue<TValue>>, List<KeyValuePair<TKey, TValue>>>
 			(
 			$"Dictionary | lock, Clear | AddRange",
 			writersCount,
 			inputItems,
 			// write
-			(KeyValuePair<TKey, TValue> inputItem, ref Dictionary<TKey, ConcurrentQueue<TValue>> main) =>
-			{
-
-				lock (main)
+			(
+					KeyValuePair<TKey, TValue> inputItem, ref Dictionary<TKey, ConcurrentQueue<TValue>> main) =>
 				{
-					// ReSharper disable once InvertIf
-					if (!main.TryGetValue(inputItem.Key, out var queue))
+					lock (main)
 					{
-						queue = new ConcurrentQueue<TValue>();
+						// ReSharper disable once InvertIf
+						if (!main.TryGetValue(inputItem.Key, out var queue))
+						{
+							queue = new ConcurrentQueue<TValue>();
 
-						main.Add(inputItem.Key, queue);
+							main.Add(inputItem.Key, queue);
+						}
+
+						queue.Enqueue(inputItem.Value);
 					}
-
-					queue.Enqueue(inputItem.Value);
-				}
-			},
+				},
 			// read
-			(ref Dictionary<TKey, ConcurrentQueue<TValue>> main, ref List<KeyValuePair<TKey, TValue>> output) =>
-			{
-				lock (main)
+			(
+				ref Dictionary<TKey, ConcurrentQueue<TValue>> main, ref List<KeyValuePair<TKey, TValue>> output) =>
 				{
-					output.AddRange(from pair in main from subPair in pair.Value select new KeyValuePair<TKey, TValue>(pair.Key, subPair));
+					lock (main)
+					{
+						output.AddRange(from pair in main from subPair in pair.Value select new KeyValuePair<TKey, TValue>(pair.Key, subPair));
 
-					main.Clear();
+						main.Clear();
+					}
 				}
-			}
 			);
 
 		return test.RunAsync();
 	}
 
-	public static Task<CollectionLoadTestResult> CreateConcurrentDictionaryTest<TKey, TValue>(IReadOnlyList<KeyValuePair<TKey, TValue>> inputItems, Int32 writersCount)
+	public static Task<CollectionTestResult> CreateConcurrentDictionaryTest<TKey, TValue>(IReadOnlyList<KeyValuePair<TKey, TValue>> inputItems, Int32 producersCount, TimeSpan producerDelay)
 	{
 		var test = new CollectionLoadTest<KeyValuePair<TKey, TValue>, KeyValuePair<TKey, ConcurrentQueue<TValue>>, KeyValuePair<TKey, TValue>, ConcurrentDictionary<TKey, ConcurrentQueue<TValue>>, List<KeyValuePair<TKey, TValue>>>
 			(
@@ -100,16 +101,16 @@ public static class DictionaryPerformanceTestHelper
 		return test.RunAsync();
 	}
 
-	public static async Task<CollectionLoadTestResult[]> RunAllAsync<TKey, TValue>(IReadOnlyList<KeyValuePair<TKey, TValue>> inputItems, Int32 concurrentWritersCount)
+	public static async Task<CollectionTestResult[]> RunAllAsync<TKey, TValue>(IReadOnlyList<KeyValuePair<TKey, TValue>> inputItems, Int32 concurrentproducersCount, TimeSpan producerDelay)
 	{
-		var results = new CollectionLoadTestResult[2];
+		var results = new CollectionTestResult[2];
 
 		{
-			results[0] = await CreateDictionaryTest(inputItems, concurrentWritersCount);
+			results[0] = await CreateDictionaryTest(inputItems, concurrentproducersCount, TimeSpan producerDelay);
 		}
 
 		{
-			results[1] = await CreateConcurrentDictionaryTest(inputItems, concurrentWritersCount);
+			results[1] = await CreateConcurrentDictionaryTest(inputItems, concurrentproducersCount, TimeSpan producerDelay);
 		}
 
 		return results;

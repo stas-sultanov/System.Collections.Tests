@@ -1,9 +1,12 @@
-﻿namespace System.Collections.Tests;
+﻿// Created by Stas Sultanov.
+// Copyright © Stas Sultanov.
+
+namespace Tests;
 
 /// <summary>
 /// Represents a result of the Collection test.
 /// </summary>
-public sealed record CollectionLoadTestResult
+public sealed record CollectionTestResult
 {
 	#region Properties
 
