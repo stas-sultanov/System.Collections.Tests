@@ -16,7 +16,7 @@ public static class Program
 	{
 		var itemsCount = 10000000;
 
-		var producersCount = 128;
+		var producersCount = 64;
 
 		var consumerDelay = TimeSpan.FromMicroseconds(1000);
 
@@ -88,6 +88,10 @@ public static class Program
 		var result = await CollectionTestHelper.RunAllCollectionTestsAsync(inputItems, producersCount, consumerDelay);
 
 		return result;
+
+		//var result = await CollectionTestHelper.Test_SupperQueue_Async(inputItems, producersCount, consumerDelay);
+
+		//return [result];
 	}
 
 	#region Methods: Helpers

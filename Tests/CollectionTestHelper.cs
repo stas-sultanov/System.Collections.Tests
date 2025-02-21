@@ -271,13 +271,13 @@ public static class CollectionTestHelper
 	}
 
 	public static Task<CollectionTestResult> Test_SupperQueue_Async<ItemType>
-(
-	IReadOnlyList<ItemType> inputItems,
-	Int32 producersCount,
-	TimeSpan consumerDelay
-)
+	(
+		IReadOnlyList<ItemType> inputItems,
+		Int32 producersCount,
+		TimeSpan consumerDelay
+	)
 	{
-		var test = Create<ItemType, SupperQueue<ItemType>>
+		var test = Create<ItemType, ConcurrentList<ItemType>>
 		(
 			$"Add; Evict + AddRange",
 			producersCount,
@@ -287,7 +287,7 @@ public static class CollectionTestHelper
 			(inputItem, main) => main.Add(inputItem),
 			(main, output) =>
 			{
-				var items = main.Evict();
+				var items = main.EvictAll();
 
 				output.AddRange(items);
 			}

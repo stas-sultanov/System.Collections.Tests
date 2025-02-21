@@ -8,64 +8,164 @@ using System.Threading;
 
 public sealed class ConcurrentList<T>
 {
-	private Node head;
-	private Node tail;
-	private Int32 count;
+	#region Nested Types
 
-	private class Node
+	private sealed class Segment<ItemType>(Int32 capacity)
 	{
-		public T Item;
-		public Node Next;
-	}
+		#region Fields
 
-	public ConcurrentList()
-	{
-		head = null;
-		tail = null;
-		count = 0;
-	}
+		public Int32 count = 0;
 
-	public void Add(T item)
-	{
-		var newNode = new Node { Item = item, Next = null };
+		public readonly ItemType[] items = new ItemType[capacity*2];
 
-		while (true)
+		public Segment<ItemType> nextSegment = null;
+
+		#endregion
+
+		#region Methods
+
+		public Boolean TryAdd(ItemType item)
 		{
-			var oldTail = tail;
-			_ = Interlocked.CompareExchange(ref tail, newNode, oldTail);
+			var itemsLocal = items;
 
-			if (oldTail == null)
+			// loop in case of contention
+			while (true)
 			{
-				head = newNode;
-				break;
-			}
-			else if (Interlocked.CompareExchange(ref oldTail.Next, newNode, null) == null)
-			{
-				break;
+				// read current count
+				var countLocal = Volatile.Read(ref count);
+
+				if (countLocal >= items.Length)
+				{
+					return false;
+				}
+
+				// after CompareExchange, other threads trying to return will end up spinning until subsequent Write.
+				if (Interlocked.CompareExchange(ref count, countLocal + 1, countLocal) == countLocal)
+				{
+					itemsLocal[countLocal] = item;
+
+					Volatile.Write(ref count, countLocal + 1);
+
+					return true;
+				}
 			}
 		}
 
-		_ = Interlocked.Increment(ref count);
+		#endregion
 	}
 
-	public T[] EvictAll()
+	#endregion
+
+	#region Fields
+
+	private readonly Int32 segmentCapaciy;
+	private Segment<T> head;
+	private Segment<T> tail;
+	private readonly Object syncRoot;
+
+	#endregion
+
+	public ConcurrentList() : this(10)
 	{
-		Node oldHead;
-		Int32 oldCount;
+	}
 
-		do
-		{
-			oldHead = Interlocked.Exchange(ref head, null);
-			oldCount = Interlocked.Exchange(ref count, 0);
-		} while (Interlocked.CompareExchange(ref tail, null, oldHead) != oldHead);
+	public ConcurrentList(Byte capacityPower)
+	{
+		segmentCapaciy = capacityPower < 17 ? 1 << capacityPower : throw new ArgumentNullException(nameof(capacityPower));
 
-		var result = new T[oldCount];
-		var current = oldHead;
-		var index = 0;
-		while (current != null)
+		head = new Segment<T>(segmentCapaciy);
+
+		syncRoot = new Object();
+
+		tail = head;
+	}
+
+	public Boolean IsEmpty { get => head.count == 0; }
+
+	public void Add(T item)
+	{
+		while (true)
 		{
-			result[index++] = current.Item;
-			current = current.Next;
+			var tailLocal = tail;
+
+			// try to append to the existing tail
+			if (tailLocal.TryAdd(item))
+			{
+				return;
+			}
+
+			// If we were unsuccessful, take the lock so that we can compare and manipulate
+			// the tail.  Assuming another enqueuer hasn't already added a new segment,
+			// do so, then loop around to try enqueueing again.
+			lock (syncRoot)
+			{
+				if (tailLocal == tail)
+				{
+					tail.nextSegment = new Segment<T>(segmentCapaciy);
+
+					tail = tail.nextSegment;
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	/// By design this method must be run by a single thread.
+	/// </summary>
+	/// <returns></returns>
+	public List<T> EvictAll()
+	{
+		if (IsEmpty)
+		{
+			return [];
+		}
+
+		var newHead = new Segment<T>(segmentCapaciy);
+
+		// after this operation all producers will start to work with new segment
+		_ = Interlocked.Exchange(ref tail, newHead);
+
+		// get current head.
+		var evictedHead = head;
+
+		// replace head.
+		// no need for thread safity here as by design this method must be run by a single thread
+		head = tail;
+
+		// count items
+		var resultCount = 0;
+
+		{
+			var current = evictedHead;
+
+			do
+			{
+				resultCount += current.count;
+
+				current = current.nextSegment;
+			}
+			while (current != null);
+		}
+
+		var result = new List<T>(resultCount*2);
+
+		// copy items to result
+		{
+			var current = evictedHead;
+
+			var copyIndex = 0;
+
+			do
+			{
+				result.AddRange(current.items);
+
+				// Array.Copy(current.items, 0, result, copyIndex, current.count);
+
+				copyIndex += current.count;
+
+				current = current.nextSegment;
+			}
+			while (current != null);
 		}
 
 		return result;
